@@ -1,0 +1,55 @@
+name: Build Unsigned iOS IPA
+
+on:
+  workflow_dispatch: # Actions sekmesinden tek tıkla elle başlatabilmeniz için
+
+jobs:
+  build-ios:
+    runs-on: macos-14 # GitHub'ın ücretsiz Apple Silicon Mac sanal makinesi
+    defaults:
+      run:
+        working-directory: apps/mobile # Projenin ana Expo dizini
+
+    steps:
+      - name: Repoyu Klonla
+        uses: actions/checkout@v4
+
+      - name: Node.js Kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Bağımlılıkları Yükle
+        run: |
+          cd ../..
+          npm install
+
+      - name: Expo iOS Prebuild (Xcode Projesini Oluştur)
+        run: npx expo prebuild --platform ios
+
+      - name: Xcode ile Derle (.app Üretimi)
+        run: |
+          cd ios
+          xcodebuild -workspace *.xcworkspace \
+            -scheme $(xcodebuild -list -json | jq -r '.workspace.schemes[0]') \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath NutAI.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: IPA Paketini Oluştur
+        run: |
+          mkdir -p Payload
+          cp -r ios/NutAI.xcarchive/Products/Applications/*.app Payload/
+          zip -r NutAI-unsigned.ipa Payload
+
+      - name: IPA Dosyasını Çıktı Olarak Yükle (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NutAI-IPA
+          path: apps/mobile/NutAI-unsigned.ipa
+          retention-days: 5
